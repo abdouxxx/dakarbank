@@ -1,0 +1,61 @@
+rules:
+
+# ============================================================
+# Règle 1 : Détection SQL Injection (concaténation SQL)
+# ============================================================
+- id: dakarbank-sqli-concat
+  patterns:
+    - pattern: |
+        $DB.query(`SELECT ... ${$VAR} ...`)
+  message: |
+    SQL Injection potentielle : une variable utilisateur est concaténée
+    directement dans une requête SQL.
+    Utiliser des requêtes préparées (prepared statements).
+  languages:
+    - javascript
+  severity: ERROR
+  metadata:
+    cwe: "CWE-89"
+    category: security
+    technology:
+      - nodejs
+      - express
+
+# ============================================================
+# Règle 2 : Détection des secrets codés en dur
+# ============================================================
+- id: dakarbank-hardcoded-secret
+  pattern-regex: '(JWT_SECRET|DB_PASSWORD|API_KEY|SMTP_PASSWORD|SECRET|TOKEN)\s*=\s*["''][^"'']+["'']'
+  message: |
+    Secret codé en dur détecté.
+    Utiliser process.env et un fichier .env.
+  languages:
+    - javascript
+  severity: ERROR
+  metadata:
+    cwe: "CWE-798"
+    category: security
+    technology:
+      - nodejs
+
+# ============================================================
+# Règle 3 : Détection des logs de données sensibles
+# ============================================================
+- id: dakarbank-sensitive-log
+  patterns:
+    - pattern-either:
+        - pattern: console.log(req.body)
+        - pattern: console.log(req.headers)
+        - pattern: console.log($REQ.body)
+        - pattern: console.log($REQ.headers)
+  message: |
+    Des informations sensibles sont écrites dans les logs.
+    Ne jamais journaliser les mots de passe, JWT ou données personnelles.
+  languages:
+    - javascript
+  severity: WARNING
+  metadata:
+    cwe: "CWE-532"
+    category: security
+    technology:
+      - nodejs

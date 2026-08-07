@@ -1,0 +1,138 @@
+name: DakarBank DevSecOps Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+
+  # =========================
+  # 1. SAST - SEMGREP
+  # =========================
+  sast:
+    name: SAST - Semgrep
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: .semgrep/rules.yaml
+          generateSarif: "1"
+
+      - name: Upload Semgrep SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+
+
+  # =========================
+  # 2. SCA - TRIVY FILESYSTEM
+  # =========================
+  sca:
+    name: SCA - Trivy Filesystem
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: CRITICAL,HIGH
+
+
+      - name: Upload Trivy filesystem SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+
+
+  # =========================
+  # 3. BUILD - DOCKER
+  # =========================
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t dakarbank:latest .
+
+  # =========================
+  # 4. SCAN IMAGE - TRIVY
+  # =========================
+  image-scan:
+    name: Trivy Image Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t dakarbank:latest .
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: dakarbank:latest
+          format: sarif
+          output: trivy-image.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload Trivy image SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+  # =========================
+  # 5. SUMMARY
+  # =========================
+  summary:
+    name: DevSecOps Summary
+    runs-on: ubuntu-latest
+    needs:
+      - sast
+      - sca
+      - build
+      - image-scan
+
+    if: always()
+
+    steps:
+      - name: Pipeline summary
+        run: |
+          echo "## DakarBank DevSecOps Pipeline" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Jobs exécutés" >> $GITHUB_STEP_SUMMARY
+          echo "- SAST : Semgrep" >> $GITHUB_STEP_SUMMARY
+          echo "- SCA : Trivy Filesystem" >> $GITHUB_STEP_SUMMARY
+          echo "- Build : Docker" >> $GITHUB_STEP_SUMMARY
+          echo "- Scan Image : Trivy" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Les résultats SARIF sont envoyés dans GitHub Security." >> $GITHUB_STEP_SUMMARY
+          
+          
